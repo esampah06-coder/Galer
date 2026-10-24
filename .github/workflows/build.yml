@@ -1,0 +1,53 @@
+name: Build Android APK from ZIP
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Unzip and Setup Gradle Wrapper
+        run: |
+          unzip -o *.zip
+          
+          # Cek apakah gradlew sudah ada di dalam ZIP
+          GRADLEW_PATH=$(find . -name "gradlew" -type f -print -quit)
+          
+          if [ -z "$GRADLEW_PATH" ]; then
+            echo "File gradlew tidak ditemukan, men-generate otomatis..."
+            # Cari lokasi folder project utama yang punya build.gradle.kts
+            BUILD_FILE=$(find . -name "build.gradle.kts" -type f -print -quit)
+            PROJECT_DIR=$(dirname "$BUILD_FILE")
+            cd "$PROJECT_DIR"
+            
+            # Install gradle di server dan buat wrapper-nya
+            sudo apt-get update && sudo apt-get install -y gradle
+            gradle wrapper
+            PROJECT_DIR="."
+          else
+            PROJECT_DIR=$(dirname "$GRADLEW_PATH")
+          fi
+          
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "Project folder ditemukan di: $PROJECT_DIR"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build Debug APK
+        run: |
+          cd ${{ env.PROJECT_DIR }}
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: '**/build/outputs/apk/debug/app-debug.apk'
